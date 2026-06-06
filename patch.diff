@@ -1,0 +1,12 @@
+*** Begin Patch
+*** Update File: src/app/event/[id]/page.tsx
+@@
+-  const { data } = await supabase
++  const { data } = await supabase
+     .from("events")
+@@
+-    .eq("id", id)
+-    .single();
++    .eq("id", id)
++    .single<EventRecord>();
+*** End Patch

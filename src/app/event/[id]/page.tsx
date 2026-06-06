@@ -1,442 +1,408 @@
 import Link from "next/link";
+import { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { ArrowLeft, CalendarDays, CheckCircle2, Clock3, Copy, Gauge, MessageSquareMore, Vote } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { supabase } from "@/lib/supabase";
-import { revalidatePath } from "next/cache";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
-import { Calendar, Clock, Users, ChevronLeft, User } from "lucide-react";
-import { getVoteCount, getSortedSuggestions } from "@/lib/event-utils";
-import { VoteBreakdown } from "@/components/vote-breakdown";
+import { supabase } from "@/lib/supabase";
+import { getSortedSuggestions } from "@/lib/event-utils";
+import { revalidatePath } from "next/cache";
 
-interface Vote {
+type VoteRecord = {
   id: string;
   voter_name: string;
   vote_type: "yes" | "no" | "maybe";
-}
+};
 
-interface DateSuggestion {
+type DateSuggestion = {
   id: string;
   event_id: string;
   date: string;
   time: string | null;
   suggested_by: string;
   created_at: string;
-  votes: Vote[];
-}
+  votes: VoteRecord[];
+};
 
-interface Event {
+type EventRecord = {
   id: string;
   title: string;
   description: string | null;
   created_at: string;
   date_suggestions: DateSuggestion[];
-}
+};
 
 export const dynamic = "force-dynamic";
 
-export const dynamic = 'force-dynamic';
+async function getEvent(id: string): Promise<EventRecord | null> {
+  if (!supabase) return null;
+
+  const { data } = await supabase
+    .from("events")
+    .select(`
+      id,
+      title,
+      description,
+      created_at,
+      date_suggestions (
+        id,
+        event_id,
+        date,
+        time,
+        suggested_by,
+        created_at,
+        votes ( id, voter_name, vote_type )
+      )
+    `)
+    .eq("id", id)
+    .single();
+
+  return data || null;
+}
+
+function tallyVotes(suggestion: DateSuggestion) {
+  const yes = suggestion.votes.filter((vote) => vote.vote_type === "yes").length;
+  const no = suggestion.votes.filter((vote) => vote.vote_type === "no").length;
+  const maybe = suggestion.votes.filter((vote) => vote.vote_type === "maybe").length;
+  return { yes, no, maybe, total: suggestion.votes.length };
+}
+
+function VoteChip({ label, count, tone }: { label: string; count: number; tone: "green" | "red" | "amber" }) {
+  const toneClasses = {
+    green: "border-emerald-500/20 bg-emerald-500/10 text-emerald-200",
+    red: "border-rose-500/20 bg-rose-500/10 text-rose-200",
+    amber: "border-amber-500/20 bg-amber-500/10 text-amber-200",
+  };
+
+  return (
+    <div className={`rounded-2xl border px-3 py-2 text-center ${toneClasses[tone]}`}>
+      <div className="text-xl font-semibold">{count}</div>
+      <div className="text-xs uppercase tracking-[0.18em]">{label}</div>
+    </div>
+  );
+}
+
+function VoteBar({ suggestion }: { suggestion: DateSuggestion }) {
+  const { yes, no, maybe, total } = tallyVotes(suggestion);
+
+  if (!total) return null;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex h-2 overflow-hidden rounded-full bg-white/8">
+        <div className="bg-emerald-400" style={{ width: `${(yes / total) * 100}%` }} />
+        <div className="bg-rose-400" style={{ width: `${(no / total) * 100}%` }} />
+        <div className="bg-amber-400" style={{ width: `${(maybe / total) * 100}%` }} />
+      </div>
+      <div className="flex gap-4 text-xs text-muted-foreground">
+        <span className="text-emerald-200">{yes} yes</span>
+        <span className="text-rose-200">{no} no</span>
+        <span className="text-amber-200">{maybe} maybe</span>
+      </div>
+    </div>
+  );
+}
+
+async function addVote(id: string, formData: FormData) {
+  'use server';
+
+  if (!supabase) return;
+
+  const voterName = String(formData.get('voterName') || '').trim();
+  const suggestionId = String(formData.get('suggestionId') || '').trim();
+  const voteType = formData.get('voteType') as "yes" | "no" | "maybe" | null;
+
+  if (!voterName || !suggestionId || !voteType) return;
+
+  const { data: existingVote } = await supabase
+    .from('votes')
+    .select('id')
+    .eq('suggestion_id', suggestionId)
+    .eq('voter_name', voterName)
+    .single();
+
+  if (existingVote) {
+    await supabase.from('votes').update({ vote_type: voteType }).eq('id', existingVote.id);
+  } else {
+    await supabase.from('votes').insert({ suggestion_id: suggestionId, voter_name: voterName, vote_type: voteType });
+  }
+
+  revalidatePath(`/event/${id}`);
+}
+
+async function addSuggestion(id: string, formData: FormData) {
+  'use server';
+
+  if (!supabase) return;
+
+  const suggestedBy = String(formData.get('suggestedBy') || '').trim();
+  const date = String(formData.get('date') || '').trim();
+  const time = String(formData.get('time') || '').trim();
+
+  if (!suggestedBy || !date) return;
+
+  const { data: suggestion } = await supabase
+    .from('date_suggestions')
+    .insert({
+      event_id: id,
+      date,
+      time: time || null,
+      suggested_by: suggestedBy,
+    })
+    .select('id')
+    .single();
+
+  if (suggestion) {
+    await supabase.from('votes').insert({
+      suggestion_id: suggestion.id,
+      voter_name: suggestedBy,
+      vote_type: 'yes',
+    });
+  }
+
+  revalidatePath(`/event/${id}`);
+}
+
+function formatDate(date: string, withTime = false) {
+  const base = new Date(date).toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  return withTime ? base : base;
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const event = await getEvent(id);
+
+  if (!event) {
+    return { title: 'Event not found' };
+  }
+
+  return {
+    title: `${event.title} | Group Date Planner`,
+    description: event.description || 'Vote on dates and find the best time to meet.',
+  };
+}
 
 export default async function EventPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-
-  let event: Event | null = null;
-  
-  if (supabase) {
-    try {
-      const { data } = await supabase
-        .from('events')
-        .select(`
-          *,
-          date_suggestions (
-            *,
-            votes (*)
-          )
-        `)
-        .eq('id', id)
-        .single();
-      
-      event = data;
-    } catch (error) {
-      console.error("Error fetching event:", error);
-    }
-  }
+  const event = await getEvent(id);
 
   if (!event) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6 text-center">
-            <h1 className="text-2xl font-bold mb-4">Event Not Found</h1>
-            <Link href="/">
-              <Button>Back to Home</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    notFound();
   }
 
-  const sortedSuggestions = getSortedSuggestions(event.date_suggestions || []);
-
-  async function addVote(formData: FormData) {
-    'use server';
-
-    if (!supabase) return;
-
-    const voterName = formData.get('voterName') as string;
-    const suggestionId = formData.get('suggestionId') as string;
-    const voteType = formData.get('voteType') as 'yes' | 'no' | 'maybe';
-
-    if (!voterName || !suggestionId || !voteType) return;
-
-    const { data: existingVote } = await supabase
-      .from('votes')
-      .select('id')
-      .eq('suggestion_id', suggestionId)
-      .eq('voter_name', voterName)
-      .single();
-
-    if (existingVote) {
-      await supabase
-        .from('votes')
-        .update({ vote_type: voteType })
-        .eq('id', existingVote.id);
-    } else {
-      await supabase
-        .from('votes')
-        .insert({
-          suggestion_id: suggestionId,
-          voter_name: voterName,
-          vote_type: voteType
-        });
-    }
-
-    revalidatePath(`/event/${id}`);
-  }
-
-    async function addSuggestion(formData: FormData) {
-    'use server';
-
-    if (!supabase) return;
-
-    const date = formData.get('date') as string;
-    const time = formData.get('time') as string;
-    const suggestedBy = formData.get('suggestedBy') as string;
-
-    if (!date || !suggestedBy) return;
-
-    const todayStr = new Date().toISOString().split('T')[0];
-
-    if (date < todayStr) return;
-
-    const { data: suggestion, error: suggestionError } = await supabase
-      .from('date_suggestions')
-      .insert({
-        event_id: id,
-        date,
-        time: time || null,
-        suggested_by: suggestedBy
-      })
-      .select()
-      .single();
-
-    if (!suggestionError && suggestion) {
-      await supabase
-        .from('votes')
-        .insert({
-          suggestion_id: suggestion.id,
-          voter_name: suggestedBy,
-          vote_type: 'yes'
-        });
-    }
-
-    revalidatePath(`/event/${id}`);
-  }
+  const suggestions = getSortedSuggestions(event.date_suggestions || []);
+  const topSuggestion = suggestions[0];
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-6 max-w-5xl">
-        {/* Header */}
-        <div className="mb-8">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors mb-4">
-            <ChevronLeft className="h-4 w-4" />
-            Back to Home
-          </Link>
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-            <div className="flex-1">
-              <h1 className="text-3xl font-bold mb-2">{event.title}</h1>
-              {event.description && (
-                <p className="text-lg text-muted-foreground mb-1">{event.description}</p>
-              )}
-              <p className="text-sm text-muted-foreground">
-                Created: {new Date(event.created_at).toLocaleDateString()}
-              </p>
+    <main className="relative min-h-screen overflow-hidden px-4 py-6 md:px-6 md:py-8">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(52,211,153,0.15),_transparent_24%),radial-gradient(circle_at_90%_20%,_rgba(56,189,248,0.12),_transparent_20%)]" />
+      <div className="relative mx-auto w-full max-w-7xl space-y-8">
+        <header className="surface-strong rounded-[2rem] p-5 shadow-2xl shadow-black/20 md:p-6">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-4">
+              <Link href="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-primary">
+                <ArrowLeft className="h-4 w-4" />
+                Back home
+              </Link>
+              <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-sm text-primary">
+                <Vote className="h-4 w-4" />
+                Live planning room
+              </div>
+              <div className="space-y-2">
+                <h1 className="text-4xl font-semibold tracking-tight md:text-6xl">{event.title}</h1>
+                {event.description && <p className="max-w-3xl text-base leading-7 text-muted-foreground md:text-lg">{event.description}</p>}
+              </div>
+              <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2">
+                  <Clock3 className="h-4 w-4 text-primary" />
+                  Created {new Date(event.created_at).toLocaleDateString()}
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2">
+                  <MessageSquareMore className="h-4 w-4 text-primary" />
+                  {suggestions.length} suggestion{suggestions.length === 1 ? '' : 's'}
+                </span>
+              </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-3">
               <CopyLinkButton />
             </div>
           </div>
-        </div>
+        </header>
 
-        {/* Best Date Section */}
-        {sortedSuggestions.length > 0 && (
-          <section className="mb-8">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Calendar className="h-5 w-5 text-primary" />
-              </div>
-              <h2 className="text-xl font-semibold">Best Date</h2>
+        {topSuggestion && (
+          <section>
+            <div className="mb-4 flex items-center gap-2 text-sm uppercase tracking-[0.24em] text-muted-foreground">
+              <Gauge className="h-4 w-4 text-primary" />
+              Top choice
             </div>
-            <Card className="border-0 bg-gradient-to-br from-primary/20 via-primary/10 to-background shadow-lg">
-              <CardContent className="text-center py-6 px-6">
-                <Calendar className="h-10 w-10 text-primary mx-auto mb-3" />
-                <h3 className="text-xl font-bold mb-2">
-                  {new Date(sortedSuggestions[0].date).toLocaleDateString('en-US', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
-                </h3>
-                {sortedSuggestions[0].time && (
-                  <div className="flex items-center justify-center gap-2 text-base text-primary mb-3">
-                    <Clock className="h-4 w-4" />
-                    {sortedSuggestions[0].time}
+            <Card className="surface-strong border-white/10 shadow-2xl shadow-black/20">
+              <CardContent className="grid gap-6 p-6 md:grid-cols-[1.25fr_0.75fr] md:items-center md:p-8">
+                <div className="space-y-4">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Leading date
                   </div>
-                )}
-                <div className="flex items-center justify-center gap-4 text-sm">
-                  <div className="text-center">
-                    <div className="font-bold text-xl text-green-400">{getVoteCount(sortedSuggestions[0], 'yes')}</div>
-                    <div className="text-muted-foreground">Yes</div>
+                  <h2 className="text-3xl font-semibold md:text-4xl">{formatDate(topSuggestion.date)}</h2>
+                  <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+                    {topSuggestion.time && (
+                      <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2">
+                        <Clock3 className="h-4 w-4 text-primary" />
+                        {topSuggestion.time}
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2">
+                      Suggested by {topSuggestion.suggested_by}
+                    </span>
                   </div>
-                  <div className="text-center">
-                    <div className="font-bold text-xl text-red-400">{getVoteCount(sortedSuggestions[0], 'no')}</div>
-                    <div className="text-muted-foreground">No</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-bold text-xl text-yellow-400">{getVoteCount(sortedSuggestions[0], 'maybe')}</div>
-                    <div className="text-muted-foreground">Maybe</div>
-                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  {(() => {
+                    const tally = tallyVotes(topSuggestion);
+                    return (
+                      <>
+                        <VoteChip label="Yes" count={tally.yes} tone="green" />
+                        <VoteChip label="No" count={tally.no} tone="red" />
+                        <VoteChip label="Maybe" count={tally.maybe} tone="amber" />
+                      </>
+                    );
+                  })()}
                 </div>
               </CardContent>
             </Card>
           </section>
         )}
 
-        {/* Suggested Dates Section */}
-        <section className="mb-12">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-primary/10 rounded-lg">
-              <Users className="h-5 w-5 text-primary" />
+        <section className="grid gap-6 lg:grid-cols-[1.35fr_0.9fr]">
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <CalendarDays className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-semibold">Suggestions</h2>
+                <p className="text-sm text-muted-foreground">Compare dates and vote in one glance.</p>
+              </div>
             </div>
-            <h2 className="text-2xl font-semibold">Suggested Dates</h2>
+
+            {suggestions.length === 0 ? (
+              <Card className="surface border-white/10">
+                <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
+                  <CalendarDays className="h-12 w-12 text-primary/70" />
+                  <h3 className="text-xl font-medium">No dates yet</h3>
+                  <p className="max-w-md text-muted-foreground">Add the first suggestion and let the group start voting.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {suggestions.map((suggestion) => {
+                  const tally = tallyVotes(suggestion);
+
+                  return (
+                    <Card key={suggestion.id} className="surface h-full border-white/10 transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 hover:shadow-2xl hover:shadow-black/20">
+                      <CardHeader className="space-y-3 border-b border-white/10 pb-5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <CardTitle className="text-2xl leading-tight">{formatDate(suggestion.date)}</CardTitle>
+                            {suggestion.time && (
+                              <CardDescription className="mt-2 inline-flex items-center gap-2 text-sm">
+                                <Clock3 className="h-4 w-4 text-primary" />
+                                {suggestion.time}
+                              </CardDescription>
+                            )}
+                          </div>
+                          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-muted-foreground">
+                            {suggestion.votes.length} vote{suggestion.votes.length === 1 ? '' : 's'}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">Suggested by {suggestion.suggested_by}</p>
+                      </CardHeader>
+                      <CardContent className="space-y-5 pt-5">
+                        <div className="grid grid-cols-3 gap-3">
+                          <VoteChip label="Yes" count={tally.yes} tone="green" />
+                          <VoteChip label="No" count={tally.no} tone="red" />
+                          <VoteChip label="Maybe" count={tally.maybe} tone="amber" />
+                        </div>
+
+                        <VoteBar suggestion={suggestion} />
+
+                        <form action={addVote.bind(null, id)} className="space-y-3">
+                          <input type="hidden" name="suggestionId" value={suggestion.id} />
+                          <div className="space-y-2">
+                            <Label htmlFor={`name-${suggestion.id}`} className="text-sm font-medium">Your name</Label>
+                            <Input id={`name-${suggestion.id}`} name="voterName" placeholder="Add your vote" className="h-11 rounded-2xl bg-black/10 px-4" required />
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <Button type="submit" name="voteType" value="yes" variant="outline" className="rounded-2xl border-emerald-500/20 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20">Yes</Button>
+                            <Button type="submit" name="voteType" value="maybe" variant="outline" className="rounded-2xl border-amber-500/20 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20">Maybe</Button>
+                            <Button type="submit" name="voteType" value="no" variant="outline" className="rounded-2xl border-rose-500/20 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20">No</Button>
+                          </div>
+                        </form>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
           </div>
-          
-          {sortedSuggestions.length === 0 ? (
-            <Card>
-              <CardContent className="pt-8 pb-8 text-center">
-                <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                <p className="text-base text-muted-foreground">No date suggestions yet. Be the first to add one below!</p>
+
+          <div className="space-y-6">
+            <Card className="surface-strong border-white/10 shadow-2xl shadow-black/20">
+              <CardHeader>
+                <CardTitle className="text-2xl">Add suggestion</CardTitle>
+                <CardDescription>Drop in another date and auto-vote it yes.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form action={addSuggestion.bind(null, id)} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="suggestedBy" className="text-sm font-medium">Your name</Label>
+                    <Input id="suggestedBy" name="suggestedBy" placeholder="Who suggested this?" className="h-11 rounded-2xl bg-black/10 px-4" required />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="date" className="text-sm font-medium">Date</Label>
+                      <Input id="date" name="date" type="date" className="h-11 rounded-2xl bg-black/10 px-4" required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="time" className="text-sm font-medium">Time</Label>
+                      <Input id="time" name="time" type="time" className="h-11 rounded-2xl bg-black/10 px-4" />
+                    </div>
+                  </div>
+                  <Button type="submit" className="h-11 w-full rounded-2xl text-base">Add suggestion</Button>
+                </form>
               </CardContent>
             </Card>
-          ) : (
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {sortedSuggestions.map((suggestion: DateSuggestion) => (
-                <Card key={suggestion.id} className="flex flex-col hover:shadow-lg transition-shadow">
-                  <CardHeader className="pb-3">
-                    <div>
-                      <CardTitle className="text-lg mb-1">
-                        {new Date(suggestion.date).toLocaleDateString('en-US', {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric'
-                        })}
-                      </CardTitle>
-                      {suggestion.time && (
-                        <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                          <Clock className="h-3 w-3" />
-                          <span>{suggestion.time}</span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <User className="h-3 w-3" />
-                        <span>Suggested by {suggestion.suggested_by}</span>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex-1 pt-0">
-                    <div className="flex gap-4 mb-4">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-green-400">
-                          {getVoteCount(suggestion, 'yes')}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">Yes</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-red-400">
-                          {getVoteCount(suggestion, 'no')}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">No</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-yellow-400">
-                          {getVoteCount(suggestion, 'maybe')}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">Maybe</div>
-                      </div>
-                    </div>
 
-                    {/* Visual Vote Diagram */}
-                    {suggestion.votes.length > 0 && (
-                      <div className="mb-4">
-                        <div className="flex h-2.5 rounded-full overflow-hidden bg-gray-700">
-                          {(() => {
-                            const total = suggestion.votes.length;
-                            const yesCount = getVoteCount(suggestion, 'yes');
-                            const noCount = getVoteCount(suggestion, 'no');
-                            const maybeCount = getVoteCount(suggestion, 'maybe');
-                            const yesWidth = (yesCount / total) * 100;
-                            const noWidth = (noCount / total) * 100;
-                            const maybeWidth = (maybeCount / total) * 100;
-                            
-                            return (
-                              <>
-                                {yesWidth > 0 && (
-                                  <div 
-                                    className="bg-green-500 h-full transition-all duration-300" 
-                                    style={{ width: `${yesWidth}%` }}
-                                    title={`Yes: ${yesCount}`}
-                                  />
-                                )}
-                                {noWidth > 0 && (
-                                  <div 
-                                    className="bg-red-500 h-full transition-all duration-300" 
-                                    style={{ width: `${noWidth}%` }}
-                                    title={`No: ${noCount}`}
-                                  />
-                                )}
-                                {maybeWidth > 0 && (
-                                  <div 
-                                    className="bg-yellow-500 h-full transition-all duration-300" 
-                                    style={{ width: `${maybeWidth}%` }}
-                                    title={`Maybe: ${maybeCount}`}
-                                  />
-                                )}
-                              </>
-                            );
-                          })()}
-                        </div>
-                        <div className="flex justify-between text-xs text-muted-foreground mt-1.5">
-                          <span className="text-green-400">{getVoteCount(suggestion, 'yes')} Yes</span>
-                          <span className="text-red-400">{getVoteCount(suggestion, 'no')} No</span>
-                          <span className="text-yellow-400">{getVoteCount(suggestion, 'maybe')} Maybe</span>
-                        </div>
-                      </div>
-                    )}
-
-                    <VoteBreakdown suggestion={suggestion} />
-
-<form action={addVote} className="mt-4 space-y-2">
-                        <input type="hidden" name="suggestionId" value={suggestion.id} />
-                        <Input
-                          name="voterName"
-                          placeholder="Your name"
-                          required
-                          className="text-sm h-9"
-                        />
-                        <div className="grid grid-cols-3 gap-1.5">
-                          <Button
-                            type="submit"
-                            name="voteType"
-                            value="yes"
-                            variant="ghost"
-                            size="sm"
-                            className="bg-green-900/30 hover:bg-green-900/50 text-green-300 text-xs font-medium"
-                          >
-                            Yes
-                          </Button>
-                          <Button
-                            type="submit"
-                            name="voteType"
-                            value="no"
-                            variant="ghost"
-                            size="sm"
-                            className="bg-red-900/30 hover:bg-red-900/50 text-red-300 text-xs font-medium"
-                          >
-                            No
-                          </Button>
-                          <Button
-                            type="submit"
-                            name="voteType"
-                            value="maybe"
-                            variant="ghost"
-                            size="sm"
-                            className="bg-yellow-900/30 hover:bg-yellow-900/50 text-yellow-300 text-xs font-medium"
-                          >
-                            Maybe
-                          </Button>
-                        </div>
-                      </form>
-                   </CardContent>
-                 </Card>
-               ))}
-             </div>
-           )}
-         </section>
-
-        {/* Add New Date Suggestion Section */}
-        <section>
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-primary/10 rounded-lg">
-              <Calendar className="h-5 w-5 text-primary" />
-            </div>
-            <h2 className="text-2xl font-semibold">Add New Date Suggestion</h2>
-          </div>
-          <Card className="shadow-lg">
-            <CardContent className="pt-6">
-              <form action={addSuggestion} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="suggestedBy" className="text-sm font-medium">Your Name *</Label>
-                    <Input
-                      id="suggestedBy"
-                      name="suggestedBy"
-                      placeholder="Enter your name"
-                      required
-                      className="h-10"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="date" className="text-sm font-medium">Date *</Label>
-                    <Input
-                      id="date"
-                      name="date"
-                      type="date"
-                      required
-                      min={new Date().toISOString().split('T')[0]}
-                      className="h-10"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="time" className="text-sm font-medium">Time</Label>
-                    <Input
-                      id="time"
-                      name="time"
-                      type="time"
-                      className="h-10"
-                    />
-                  </div>
+            <Card className="surface border-white/10">
+              <CardHeader>
+                <CardTitle className="text-xl">Quick guide</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <div className="flex gap-3 rounded-2xl border border-white/8 bg-black/10 p-4">
+                  <Vote className="mt-0.5 h-4 w-4 text-primary" />
+                  <p>Everyone can vote directly from this page.</p>
                 </div>
-                <Button type="submit" size="default" className="px-6">
-                  Add Suggestion
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+                <div className="flex gap-3 rounded-2xl border border-white/8 bg-black/10 p-4">
+                  <Gauge className="mt-0.5 h-4 w-4 text-primary" />
+                  <p>Suggestions are sorted by support, then by lower opposition.</p>
+                </div>
+                <div className="flex gap-3 rounded-2xl border border-white/8 bg-black/10 p-4">
+                  <Copy className="mt-0.5 h-4 w-4 text-primary" />
+                  <p>Copy the link and share the room with your group.</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </section>
       </div>
-    </div>
+    </main>
   );
 }

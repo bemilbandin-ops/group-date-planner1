@@ -1,1 +1,46 @@
-<import Link from "next/link";\nimport { Button } from "@/components/ui/button";\nimport { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";\nimport { CalendarDays, Users, Shield, Sparkles } from "lucide-react";\n\ninterface FeatureCardProps {\n  icon: React.ReactNode;\n  title: string;\n  description: string;\n  href?: string;\n}\n\nexport function FeatureCard({ icon, title, description, href }: FeatureCardProps) {\n  return (\n    <Card className="border-0 bg-card/50 shadow-md hover:shadow-lg transition-shadow">\n      <CardHeader>\n        <div className="p-3 bg-primary/10 rounded-lg w-fit mb-4">\n          {icon}\n        </div>\n        <CardTitle className="text-xl">{title}</CardTitle>\n        <CardDescription>{description}</CardDescription>\n      </CardHeader>\n      {href && (\n        <div className="mt-4 text-center">\n          <Link href={href}>\n            <Button variant="outline" size="sm">Learn More</Button>\n          </Link>\n        </div>\n      )}\n    </Card>\n  );\n}\n\ninterface FeatureSectionProps {\n  title: string;\n  description: string;\n  features: Array<{\n    icon: React.ReactNode;\n    title: string;\n    description: string;\n    href?: string;\n  >};\n}\n\nexport function FeatureSection({ title, description, features }: FeatureSectionProps) {\n  return (\n    <section className="mb-20">\n      <div className="text-center mb-12">\n        <h2 className="text-3xl font-bold">{title}</h2>\n        <p className="text-xl text-muted-foreground max-w-2xl mx-auto">{description}</p>\n      </div>\n      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">\n        {features.map((feature, index) => (\n          <FeatureCard\n            key={index}\n            icon={feature.icon}\n            title={feature.title}\n            description={feature.description}\n            href={feature.href}\n          />\n        ))}\n      </div>\n    </section>\n  );\n}
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+
+interface FeatureCardProps {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}
+
+export function FeatureCard({ icon, title, description }: FeatureCardProps) {
+  return (
+    <Card className="surface border-white/10 transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 hover:shadow-2xl hover:shadow-black/20">
+      <CardHeader className="space-y-4">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          {icon}
+        </div>
+        <div>
+          <CardTitle className="text-xl">{title}</CardTitle>
+          <CardDescription className="mt-2 text-sm leading-6">{description}</CardDescription>
+        </div>
+      </CardHeader>
+    </Card>
+  );
+}
+
+interface FeatureSectionProps {
+  title: string;
+  description: string;
+  features: FeatureCardProps[];
+}
+
+export function FeatureSection({ title, description, features }: FeatureSectionProps) {
+  return (
+    <section className="space-y-8">
+      <div className="max-w-3xl space-y-4">
+        <p className="text-sm uppercase tracking-[0.25em] text-muted-foreground">Planning made simple</p>
+        <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">{title}</h2>
+        <p className="text-lg leading-8 text-muted-foreground">{description}</p>
+      </div>
+      <div className="grid gap-5 md:grid-cols-3">
+        {features.map((feature) => (
+          <FeatureCard key={feature.title} {...feature} />
+        ))}
+      </div>
+    </section>
+  );
+}

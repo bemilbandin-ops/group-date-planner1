@@ -1,3 +1,0 @@
-  vote_type: 'yes' | 'no' | 'maybe';
-function getVoteCount(suggestion: DateSuggestion, type: 'yes' | 'no' | 'maybe') {
-    const voteType = formData.get('voteType') as 'yes' | 'no' | 'maybe';
