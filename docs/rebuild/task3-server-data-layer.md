@@ -2,7 +2,7 @@
 
 ## Codex instruction
 
-Implement the server-side data layer and validation helpers. Complete only this task. Do not build the final UI yet, except for minimal wiring needed to keep the app compiling.
+Implement the server-side data layer and validation helpers using Drizzle. Complete only this task. Do not build the final UI yet, except for minimal wiring needed to keep the app compiling.
 
 ## Goal
 
@@ -21,6 +21,16 @@ src/lib/utils.ts
 ```
 
 Use folders if needed, but keep the data layer small.
+
+## Database requirement
+
+Use the Drizzle database client from task2.
+
+Rules:
+
+- Do not use Supabase.
+- Do not use browser-side database writes.
+- Any file that imports the database client must be server-only directly or indirectly.
 
 ## Validation requirements
 
@@ -58,6 +68,7 @@ listRecentEventsForAdmin(): Promise<EventRecord[]>;
 Rules:
 
 - `getEventById` must ignore soft-deleted events.
+- `getEventById` should return the event with suggestions and votes.
 - `listRecentEventsForAdmin` is for admin only and should not be used on the homepage.
 - `softDeleteEvent` sets `deleted_at`, not hard delete.
 
@@ -96,7 +107,7 @@ Rules:
 
 - Validate all input.
 - Verify the suggestion belongs to the event id.
-- Use upsert on `(suggestion_id, voter_name)` so the same named voter can change their vote.
+- Use Drizzle insert with conflict handling on `(suggestion_id, voter_name)` so the same named voter can change their vote.
 
 ## Sorting and vote utilities
 
@@ -116,19 +127,16 @@ Sort suggestions by:
 
 The generic must preserve each suggestion's full type.
 
-## Server-only requirement
-
-Any file that imports the Supabase service-role client must import `server-only` directly or indirectly.
-
 ## Error handling
 
 - Throw safe, user-readable errors from validation failures.
-- Do not expose raw Supabase errors directly to users.
+- Do not expose raw database errors directly to users.
 - Log server errors with enough context for debugging, but do not log secrets.
 
 ## Rules
 
-- No client-side Supabase.
+- No Supabase.
+- No client-side database access.
 - No public event listing.
 - No admin auth yet.
 - No large abstraction layer.
@@ -137,10 +145,11 @@ Any file that imports the Supabase service-role client must import `server-only`
 ## Acceptance criteria
 
 - All data functions compile.
+- Data functions use Drizzle, not Supabase.
 - `getSortedSuggestions` preserves generic item types.
 - `submitVote` verifies event/suggestion relationship.
 - `addDateSuggestion` verifies event existence.
-- No browser/client component imports `supabaseServer.ts`.
+- No browser/client component imports `src/db/index.ts`.
 - `npm run typecheck` passes.
 - `npm run build` passes.
 
