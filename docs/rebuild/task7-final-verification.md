@@ -2,11 +2,11 @@
 
 ## Codex instruction
 
-Perform final verification of the simplified rebuild. Complete only this task. Do not add new product features unless they are required to fix broken acceptance criteria.
+Perform final verification of the simplified Neon + Vercel rebuild. Complete only this task. Do not add new product features unless they are required to fix broken acceptance criteria.
 
 ## Goal
 
-Confirm the app is clean, coherent, buildable, and ready for a Vercel/Supabase deployment attempt.
+Confirm the app is clean, coherent, buildable, and ready for a Vercel/Neon deployment attempt.
 
 ## Verification checklist
 
@@ -22,17 +22,20 @@ Check for accidental files and remove them if present:
 - Debug logs.
 - Unused old components.
 - Unused old routes.
-- Dead Supabase browser clients.
+- Dead Supabase clients or Supabase setup files from the old plan.
 
 ### 2. Secret exposure check
 
 Search the codebase for:
 
 - `NEXT_PUBLIC_ADMIN_PASSWORD`
-- `SUPABASE_SERVICE_ROLE_KEY` usage outside server-only files.
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `DATABASE_URL` usage outside server-only code, config files, and docs.
 - `localStorage` admin auth.
 - Password comparisons in client components.
-- Service-role key references in client components.
+- Database imports in client components.
 
 Fix any exposure.
 
@@ -49,6 +52,8 @@ Confirm:
 
 Confirm:
 
+- Drizzle schema has exactly the intended v1 tables: `events`, `date_suggestions`, and `votes`.
+- Drizzle migration exists under `drizzle/`.
 - Votes are unique per suggestion and voter name.
 - Updating a vote works.
 - Suggestions cannot be added to deleted events.
@@ -82,7 +87,7 @@ Fix failures unless they require changing product scope. If scope would change, 
 
 ### 7. Manual smoke test
 
-With local Supabase env vars configured, run through:
+With local `DATABASE_URL` configured and migrations run, test:
 
 1. Open `/`.
 2. Go to `/create`.
@@ -122,6 +127,7 @@ Do not add full E2E infrastructure in this task unless it already exists.
 - Do not add email invites.
 - Do not add realtime.
 - Do not add a public event directory.
+- Do not add Supabase.
 - Do not add a large test framework if none exists.
 - Prefer fixing broken code over adding more abstraction.
 
@@ -129,7 +135,8 @@ Do not add full E2E infrastructure in this task unless it already exists.
 
 - Repo has no obvious temporary/debug files.
 - No public admin password exists.
-- No service-role key can reach the browser bundle.
+- No Supabase env vars or clients remain in rebuild code.
+- No `DATABASE_URL` can reach the browser bundle.
 - Public pages satisfy the private-by-link model.
 - Admin moderation works.
 - `npm run lint` passes.
