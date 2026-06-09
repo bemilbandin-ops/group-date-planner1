@@ -51,7 +51,7 @@ Event page.
 Behavior:
 
 - Validate id as UUID.
-- Load event with suggestions and votes.
+- Load event with suggestions and votes through the server data layer.
 - Show not found if missing, invalid, or soft-deleted.
 - Show event title and description.
 - Show copy/share link area.
@@ -101,14 +101,14 @@ Keep the UI simple:
 
 Do not expose any route that lists all events publicly.
 
-The root page must not fetch from Supabase.
+The root page must not fetch from the database.
 
 ## Metadata
 
 Add basic metadata:
 
 - Root title and description.
-- Generic event page metadata that does not leak private event details, for example `Group Date Planner event`.
+- Generic event page metadata that does not leak private event title/description, for example `Group Date Planner event`.
 
 ## Rules
 
@@ -117,7 +117,8 @@ Add basic metadata:
 - No realtime.
 - No email invites.
 - No admin implementation in this task.
-- No browser-side Supabase usage.
+- No browser-side database access.
+- No Supabase.
 
 ## Acceptance criteria
 
@@ -128,6 +129,7 @@ Add basic metadata:
 - Invalid event ids show a not-found page or equivalent safe fallback.
 - Soft-deleted events do not render.
 - `/` does not query or reveal events.
+- No client component imports the database client.
 - `npm run typecheck` passes.
 - `npm run build` passes.
 
