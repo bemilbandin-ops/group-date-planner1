@@ -1,10 +1,10 @@
 # Simplified Rebuild Plan
 
-This folder is the Codex execution plan for rebuilding Group Date Planner from scratch in a simpler, deployment-friendly form.
+This folder is the Codex execution plan for rebuilding Group Date Planner from scratch in the simplest deployment-friendly form.
 
 ## Goal
 
-Rebuild the app as a small Next.js + Supabase project that is easy to deploy on Vercel.
+Rebuild the app as a small Next.js + Neon Postgres project that deploys cleanly on Vercel.
 
 ## Product scope for v1
 
@@ -27,7 +27,7 @@ Do not build this in v1:
 - Email invites.
 - Realtime subscriptions.
 - Complex analytics.
-- Complex rate limiting beyond a simple production-safe middleware/helper.
+- Complex rate limiting beyond a simple production-safe helper or provider-level protection.
 - A large component library.
 
 ## Recommended stack
@@ -35,10 +35,15 @@ Do not build this in v1:
 - Next.js App Router.
 - TypeScript.
 - Tailwind CSS.
-- Supabase Postgres.
-- `@supabase/supabase-js` used only from server-side code.
+- Neon Free Postgres, or Vercel Postgres if available for the account.
+- Drizzle ORM for schema, migrations, and database queries.
+- `postgres` package as the database driver.
 - Vercel deployment.
 - System fonts only. Do not use `next/font/google` for v1.
+
+## Why this stack
+
+This is simpler than Supabase for this app because v1 only needs a database. It avoids Supabase Auth, RLS policy design, browser anon keys, and service-role key handling.
 
 ## Execution order
 
@@ -67,8 +72,8 @@ After Codex finishes a task, review the diff, run the checks named in that task,
 - Prefer deleting old code over adapting broken code.
 - Keep the app boring and small.
 - Do not add a dependency unless the task explicitly asks for it or it clearly reduces code.
-- Do not use browser-side Supabase writes.
-- Do not expose service-role keys or admin passwords to the browser.
+- Do not use browser-side database writes.
+- Do not expose `DATABASE_URL`, admin passwords, or session secrets to the browser.
 - Use server actions or route handlers for writes.
 - Keep every page deployable on Vercel.
 - Keep `npm run check` green after every task once it exists.
