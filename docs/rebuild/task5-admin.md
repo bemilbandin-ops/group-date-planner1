@@ -2,7 +2,7 @@
 
 ## Codex instruction
 
-Add a small password-protected admin area for moderation. Complete only this task. Do not add user accounts, Supabase Auth, or a public event directory.
+Add a small password-protected admin area for moderation. Complete only this task. Do not add user accounts, external auth providers, or a public event directory.
 
 ## Goal
 
@@ -79,7 +79,7 @@ Show recent non-deleted events:
 ### Delete behavior
 
 - Delete action requires valid admin session.
-- It must call `softDeleteEvent(id)`.
+- It must call `softDeleteEvent(id)` from the server data layer.
 - It must not hard-delete rows.
 - After delete, refresh `/admin`.
 
@@ -94,18 +94,19 @@ Add a logout action that clears the cookie and redirects to `/admin/login`.
 - Do not expose whether env vars are missing to public users; log server-side and show generic error.
 - Admin-only data fetching must happen server-side.
 - No admin API should work without a valid signed cookie.
+- Never expose `DATABASE_URL` to the browser.
 
 ## Rate limiting
 
-Add a minimal production-safe login throttle if straightforward. Prefer a simple helper keyed by IP and backed by a deployment-safe store only if already available. If no deployment-safe store exists, document the limitation in `docs/rebuild/task6-deployment-docs.md` later rather than adding fragile in-memory-only security.
+Add a minimal production-safe login throttle if straightforward. Prefer provider-level protection, Vercel protection, or an external store if one is already available. If no deployment-safe store exists, document the limitation in `docs/OPERATIONS.md` rather than adding fragile in-memory-only security.
 
 ## Rules
 
-- No Supabase Auth.
-- No accounts.
+- No user accounts.
 - No role system.
 - No public event listing.
-- No client-side service-role access.
+- No client-side database access.
+- No Supabase.
 
 ## Acceptance criteria
 
@@ -118,6 +119,7 @@ Add a minimal production-safe login throttle if straightforward. Prefer a simple
 - Admin can soft-delete an event.
 - Deleted events no longer render on `/event/[id]`.
 - `NEXT_PUBLIC_ADMIN_PASSWORD` does not exist.
+- No client component imports the database client.
 - `npm run typecheck` passes.
 - `npm run build` passes.
 
