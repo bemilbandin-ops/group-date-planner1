@@ -2,11 +2,11 @@
 
 ## Codex instruction
 
-Write the deployment and operations documentation for the simplified rebuild. Complete only this task. Do not add new product features.
+Write the deployment and operations documentation for the simplified Neon + Vercel rebuild. Complete only this task. Do not add new product features.
 
 ## Goal
 
-A new developer or the app owner can deploy the app to Vercel with Supabase using only committed instructions.
+A new developer or the app owner can deploy the app to Vercel with Neon Postgres using only committed instructions.
 
 ## Required files
 
@@ -33,6 +33,7 @@ Include:
 - Local setup.
 - Database setup.
 - Environment variables.
+- Drizzle migration commands.
 - Run/check commands.
 - Deployment link to `docs/DEPLOYMENT.md`.
 - Admin notes.
@@ -42,27 +43,36 @@ Include:
 
 In `docs/DEPLOYMENT.md`, include:
 
-### 1. Supabase setup
+### 1. Neon setup
 
-- Create a Supabase project.
-- Run `supabase/migrations/0001_initial_schema.sql`.
-- Copy the project URL.
-- Copy the service role key.
-- Do not expose the service role key publicly.
+- Create a free Neon account/project.
+- Create or use the default Postgres database.
+- Copy the pooled or standard `DATABASE_URL` connection string.
+- Keep `DATABASE_URL` private.
 
-### 2. Vercel setup
+### 2. Local migration setup
+
+Explain how to run migrations against Neon:
+
+```text
+npm install
+npm run db:migrate
+```
+
+If the project uses a different migration command, document the actual command.
+
+### 3. Vercel setup
 
 - Import the GitHub repo.
 - Set framework preset to Next.js if needed.
 - Set env vars:
   - `NEXT_PUBLIC_SITE_URL`
-  - `SUPABASE_URL`
-  - `SUPABASE_SERVICE_ROLE_KEY`
+  - `DATABASE_URL`
   - `ADMIN_PASSWORD`
   - `ADMIN_SESSION_SECRET`
 - Deploy.
 
-### 3. Post-deploy smoke test
+### 4. Post-deploy smoke test
 
 Test:
 
@@ -75,15 +85,16 @@ Test:
 7. Soft-delete test event.
 8. Confirm deleted event no longer renders.
 
-### 4. Troubleshooting
+### 5. Troubleshooting
 
 Cover common issues:
 
 - Missing env vars.
-- Wrong Supabase URL/key.
+- Wrong `DATABASE_URL`.
 - Migration not run.
 - Admin password not working.
 - Build failure.
+- Database connection limit errors.
 
 ## Operations doc requirements
 
@@ -91,9 +102,10 @@ In `docs/OPERATIONS.md`, include:
 
 - How to rotate `ADMIN_PASSWORD`.
 - How to rotate `ADMIN_SESSION_SECRET` and what it does to sessions.
-- How to rotate Supabase service role key.
+- How to rotate Neon database credentials / `DATABASE_URL`.
+- How to run Drizzle migrations.
 - How to soft-delete events through admin.
-- How to inspect Supabase rows manually.
+- How to inspect database rows manually through Neon or Drizzle Studio.
 - Known limitations.
 
 Known limitations to document:
@@ -102,7 +114,8 @@ Known limitations to document:
 - No user accounts.
 - No email invite system.
 - No realtime updates.
-- Login rate limiting may require Vercel/edge/WAF or an external store if not implemented in code.
+- Login rate limiting may require Vercel/provider protection or an external store if not implemented in code.
+- Free hosting/database tiers have usage limits and can change.
 
 ## `.env.example` check
 
@@ -112,8 +125,7 @@ It should include:
 
 ```text
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
-SUPABASE_URL=
-SUPABASE_SERVICE_ROLE_KEY=
+DATABASE_URL=
 ADMIN_PASSWORD=
 ADMIN_SESSION_SECRET=
 ```
@@ -127,13 +139,15 @@ Do not include obsolete variables.
 - Do not include real secrets.
 - Do not add marketing fluff.
 - Do not add new dependencies.
+- Do not mention Supabase except possibly in a short note saying the rebuild does not use it.
 
 ## Acceptance criteria
 
 - README accurately reflects the simplified app.
-- Deployment docs are enough to deploy to Vercel and Supabase.
-- Operations docs cover secret rotation and limitations.
+- Deployment docs are enough to deploy to Vercel and Neon.
+- Operations docs cover secret rotation, migrations, and limitations.
 - `.env.example` matches code.
+- No obsolete Supabase env vars remain.
 - No obsolete `NEXT_PUBLIC_ADMIN_PASSWORD` instructions remain.
 - `npm run check` passes if available; otherwise run lint, typecheck, and build separately.
 
